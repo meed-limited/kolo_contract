@@ -1,0 +1,30 @@
+{
+  "name": "kolo_contract",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "clean": "npx hardhat clean --show-stack-traces",
+    "test": "npx hardhat test --show-stack-traces",
+    "test:gas": "REPORT_GAS=true npx hardhat test --show-stack-traces",
+    "compile": "npx hardhat compile --show-stack-traces",
+    "flatten": "npx hardhat flatten-all --show-stack-traces",
+    "deploy": "npx hardhat run scripts/deploy.ts --show-stack-traces",
+    "verify": "npx hardhat verify",
+    "size": "npx hardhat size-contracts --show-stack-traces",
+    "doc": " npx hardhat docgen",
+    "coverage": "npx hardhat coverage"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "@nomiclabs/hardhat-etherscan": "^3.1.2",
+    "dotenv": "^16.0.0",
+    "hardhat": "^2.12.2"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.7.3"
+  }
+}
