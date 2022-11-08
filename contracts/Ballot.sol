@@ -97,6 +97,11 @@ contract Ballot {
         return (ids);
     }
 
+    function voteWeight(address sender) external view returns (uint256 balance, uint256 allowance) {
+        balance = daoToken.balanceOf(sender);
+        allowance = daoToken.allowance(sender, address(this));
+    }
+
     // vote a Projectn with all KOL tokens
     function vote(address sender, uint256 projectId, uint256 amountOfVotes) external {
         require(_pollOpened == true, "Poll not open");
@@ -104,10 +109,10 @@ contract Ballot {
 
         // check if the user has any token
         require(daoToken.balanceOf(sender) >= amountOfVotes, "Insufficient KOL");
-        // require(daoToken.allowance(sender, address(this)) >= amountOfVotes, "low allowance");
+        require(daoToken.allowance(sender, address(this)) >= amountOfVotes, "Insufficient allowance");
 
-        // daoToken.permit(msg.sender, address(this), amountOfVotes, deadline, v, r, s);
-        daoToken.transferFrom(msg.sender, address(this), amountOfVotes);
+        // daoToken.permit(sender, address(this), amountOfVotes, deadline, v, r, s);
+        daoToken.transferFrom(sender, address(this), amountOfVotes);
 
         Project memory candidate = _pollHistory[_pollId][_projectId];
         candidate.voteCount = candidate.voteCount + amountOfVotes;

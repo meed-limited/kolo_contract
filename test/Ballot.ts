@@ -101,9 +101,22 @@ describe('Ballot', function () {
                 expect(await token.balanceOf(rango.address)).to.equal(0);
                 expect(await token.balanceOf(owner.address)).to.equal(totalSupply);
 
+                const amount: any = ethers.utils.parseUnits('100', 18);
+                await token.transfer(rango.address, amount);
+                expect(await token.balanceOf(rango.address)).to.equal(amount);
+                // expect(await token.balanceOf(owner.address)).to.equal(totalSupply - amount);
+
+                // get rango signatures
                 const { v, r, s }: any = await getPermitSignature(rango, token, ballot.address, amountOfTokensToVote, deadline );
 
-                await token.permit(rango.address, ballot.address, amountOfTokensToVote, deadline, v, r, s);
+                console.log('Balance BEFORE Signature by Rango')
+                rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
+                let balanceBefore = rangoBalance;
+                let ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
+                let rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
+                let ownerKOL = ethers.utils.formatEther(await token.balanceOf(owner.address));
+                console.log(`Rango - ETH balance: ${rangoBalance}, KOL balance: ${rangoKOL}`);
+                console.log(`Owner - ETH balance: ${ownerBalance}, KOL balance: ${ownerKOL}`);
 
                 await expect(ballot.vote(rango.address, initialProjectId, amountOfTokensToVote))
                     .to.be.revertedWith('Poll not open');
@@ -112,17 +125,15 @@ describe('Ballot', function () {
                 await ballot.setPollStatus();
                 expect(await ballot.isPollOpened()).to.equal(true);
 
-                const amount: any = ethers.utils.parseUnits('100', 18);
-                await token.transfer(rango.address, amount);
-                expect(await token.balanceOf(rango.address)).to.equal(amount);
-                // expect(await token.balanceOf(owner.address)).to.equal(totalSupply - amount);
+                // owner call permit approval using rango signatures
+                await token.permit(rango.address, ballot.address, amountOfTokensToVote, deadline, v, r, s);
 
-                console.log('Balance BEFORE Permit approval by Rango')
+                console.log('\nBalance AFTER Permit approval by Rango BEFORE voting by Owner');
                 rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
-                const balanceBefore = rangoBalance;
-                let ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
-                let rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
-                let ownerKOL = ethers.utils.formatEther(await token.balanceOf(owner.address));
+                balanceBefore = rangoBalance;
+                ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
+                rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
+                ownerKOL = ethers.utils.formatEther(await token.balanceOf(owner.address));
                 console.log(`Rango - ETH balance: ${rangoBalance}, KOL balance: ${rangoKOL}`);
                 console.log(`Owner - ETH balance: ${ownerBalance}, KOL balance: ${ownerKOL}`);
 
@@ -132,7 +143,7 @@ describe('Ballot', function () {
 
                 expect(await token.balanceOf(ballot.address)).to.equal(amountOfTokensToVote);
 
-                console.log('\nBalance AFTER Permit approval by Rango')
+                console.log('\nBalance AFTER Owner submit vote for Rango')
                 rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
                 ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
                 rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
