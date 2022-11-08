@@ -103,7 +103,9 @@ describe('Ballot', function () {
 
                 const { v, r, s }: any = await getPermitSignature(rango, token, ballot.address, amountOfTokensToVote, deadline );
 
-                await expect(ballot.connect(rango).vote(initialProjectId, amountOfTokensToVote, deadline, v, r, s))
+                await token.permit(rango.address, ballot.address, amountOfTokensToVote, deadline, v, r, s);
+
+                await expect(ballot.vote(rango.address, initialProjectId, amountOfTokensToVote))
                     .to.be.revertedWith('Poll not open');
 
                 // open poll
@@ -124,7 +126,9 @@ describe('Ballot', function () {
                 console.log(`Rango - ETH balance: ${rangoBalance}, KOL balance: ${rangoKOL}`);
                 console.log(`Owner - ETH balance: ${ownerBalance}, KOL balance: ${ownerKOL}`);
 
-                await ballot.connect(rango).vote(initialProjectId, amountOfTokensToVote, deadline, v, r, s);
+                console.log(`Rango allowance: ${await token.allowance(rango.address, ballot.address)}`);
+
+                await ballot.vote(rango.address, initialProjectId, amountOfTokensToVote);
 
                 expect(await token.balanceOf(ballot.address)).to.equal(amountOfTokensToVote);
 

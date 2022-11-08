@@ -98,14 +98,15 @@ contract Ballot {
     }
 
     // vote a Projectn with all KOL tokens
-    function vote(uint256 projectId, uint256 amountOfVotes, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external {
+    function vote(address sender, uint256 projectId, uint256 amountOfVotes) external {
         require(_pollOpened == true, "Poll not open");
         require(projectId <= _projectId, "Invalid project id");
 
         // check if the user has any token
-        require(daoToken.balanceOf(msg.sender) >= amountOfVotes, "Insufficient KOL");
+        require(daoToken.balanceOf(sender) >= amountOfVotes, "Insufficient KOL");
+        // require(daoToken.allowance(sender, address(this)) >= amountOfVotes, "low allowance");
 
-        daoToken.permit(msg.sender, address(this), amountOfVotes, deadline, v, r, s);
+        // daoToken.permit(msg.sender, address(this), amountOfVotes, deadline, v, r, s);
         daoToken.transferFrom(msg.sender, address(this), amountOfVotes);
 
         Project memory candidate = _pollHistory[_pollId][_projectId];
