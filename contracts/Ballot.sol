@@ -95,7 +95,7 @@ contract Ballot {
     }
 
     // Append new project to the to history
-    function submitProject(bytes32 title) external returns (uint256) {
+    function submitProject(bytes32 title) external {
         require(_acceptingProjects == true, "No new project allowed now");
         Project memory submission = Project({id: _projectId, title: title, owner: msg.sender, voteCount: 0});
 
@@ -104,8 +104,6 @@ contract Ballot {
         _tracker[_pollId].push(_projectId);
         emit NewProjectSubmitted(_projectId, title, msg.sender);
         _projectId = _projectId + 1;
-
-        return _projectId - 1;
     }
 
     function getProjects(uint256 pollId)
