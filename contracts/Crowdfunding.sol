@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+pragma solidity 0.8.16;
 
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
 import "./interfaces/IERC20.sol";
-import './abstract/Ownable.sol';
+import "./abstract/Ownable.sol";
+import "./utils/SafeERC20.sol";
 
 contract Crowdfunding is Ownable {
+    using SafeERC20 for IERC20;
+
     IERC20 public immutable usdt;
 
     uint256 _projectId = 1;
@@ -24,7 +27,12 @@ contract Crowdfunding is Ownable {
     mapping(uint256 => uint256) private _totalDonations;
 
     event NewDonationMade(uint256 projectId, uint256 amount, address owner);
-    event NewProjectSubmitted(uint256 projectId, uint256 amountRequired, address accountNumber, address sender);
+    event NewProjectSubmitted(
+        uint256 projectId,
+        uint256 amountRequired,
+        address accountNumber,
+        address sender
+    );
     event VoteSubmitted(address voter, uint256 projectId);
     // event PollWinnerAnnounced(uint256 polllId, uint256 projectId, address winner);
 
@@ -40,19 +48,36 @@ contract Crowdfunding is Ownable {
     }
 
     // Append new project to the to history
-    function submitProject(bytes32 title, uint256 amountRequired, address accountNumber) external {
-        Project memory project = Project({id: _projectId, title: title, ownerAccount: msg.sender, amountRequired: amountRequired});
+    function submitProject(
+        bytes32 title,
+        uint256 amountRequired,
+        address accountNumber
+    ) external {
+        Project memory project = Project({
+            id: _projectId,
+            title: title,
+            ownerAccount: msg.sender,
+            amountRequired: amountRequired
+        });
         _projects[_projectId] = project;
 
-        emit NewProjectSubmitted(_projectId, amountRequired, accountNumber, msg.sender);
+        emit NewProjectSubmitted(
+            _projectId,
+            amountRequired,
+            accountNumber,
+            msg.sender
+        );
         _projectId = _projectId + 1;
     }
 
     // open poll for voting
     function donate(uint256 projectId, uint256 amount) external {
         require(usdt.balanceOf(msg.sender) >= amount, "Insufficient USDT");
-        require(usdt.allowance(msg.sender, address(this)) >= amount, "Low allowance");
-        usdt.transferFrom(msg.sender, address(this), amount);
+        require(
+            usdt.allowance(msg.sender, address(this)) >= amount,
+            "Low allowance"
+        );
+        usdt.safeTransferFrom(msg.sender, address(this), amount);
 
         _totalDonations[projectId] += amount;
         _donors[msg.sender] += amount;
@@ -61,7 +86,7 @@ contract Crowdfunding is Ownable {
         emit NewDonationMade(projectId, amount, msg.sender);
     }
 
-    function disburseFunds(uint256[] memory projectIds) external onlyOwner() {
+    function disburseFunds(uint256[] memory projectIds) external onlyOwner {
         for (uint256 i = 0; i < projectIds.length; i++) {
             address ownerAccount = (_projects[projectIds[i]]).ownerAccount;
             uint256 amountRequired = (_projects[projectIds[i]]).amountRequired;
@@ -78,7 +103,7 @@ contract Crowdfunding is Ownable {
             if (totalDonation < amountRequired) {
                 usdt.batchTransfer(donors, amounts); // this will probably fail
             } else {
-                usdt.transfer(ownerAccount, amountRequired);
+                usdt.safeTransfer(ownerAccount, amountRequired);
             }
         }
     }
