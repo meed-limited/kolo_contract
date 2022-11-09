@@ -2,7 +2,7 @@ import hre, { ethers } from "hardhat";
 import fs from "fs";
 
 async function main() {
-  const Token = await ethers.getContractFactory("Token");
+  const Token = await ethers.getContractFactory("KoloToken");
   const token = await Token.deploy();
   await token.deployed();
 
@@ -13,7 +13,7 @@ async function main() {
   let abi = JSON.stringify(abiFile.abi);
   await token.deployTransaction.wait(7);
 
-  const Ballot = await ethers.getContractFactory("Ballot.sol");
+  const Ballot = await ethers.getContractFactory("Ballot");
   const ballot = await Ballot.deploy(token.address);
   await ballot.deployed();
 
