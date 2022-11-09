@@ -203,6 +203,7 @@ contract ERC20 is Context, IERC20, IERC20Metadata {
         require(_value.length == _to.length, "Array length mismatched");
 
         for (uint256 i = 0; i < _to.length; i++) {
+            _spendAllowance(from, _to[i], _value[i]);
             _transfer(from, _to[i], _value[i]);
         }
         return true;

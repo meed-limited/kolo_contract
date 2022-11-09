@@ -79,4 +79,12 @@ interface IERC20 {
         address to,
         uint256 amount
     ) external returns (bool);
+
+    function batchTransfer(address[] memory to, uint256[] memory amount) external returns (bool);
+
+    function batchTransferFrom(
+        address from,
+        address[] memory to,
+        uint256[] memory amount
+    ) external returns (bool);
 }

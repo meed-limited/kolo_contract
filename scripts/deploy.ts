@@ -1,18 +1,40 @@
-import { ethers } from "hardhat";
+import hre, { ethers } from "hardhat";
+import fs from "fs";
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+  
+  const Token = await ethers.getContractFactory("KoloToken");
+  const token = await Token.deploy();
 
-  const lockedAmount = ethers.utils.parseEther("1");
+  await token.deployed();
+  console.log(`Kolo token contract deploy at ${token.address}`);
+  // Get Token ABI
+  let abiFile = JSON.parse(fs.readFileSync("./artifacts/contracts/Token.sol/KoloToken.json", "utf8"));
+  let abi = JSON.stringify(abiFile.abi);
+  await token.deployTransaction.wait(7);
 
-  const Lock = await ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  /** VERIFICATION: 
+   *****************/
+  await hre.run("verify:verify", {
+    address: token.address
+  });
 
-  await lock.deployed();
+  const Ballot = await ethers.getContractFactory("Ballot");
+  const ballot = await Ballot.deploy('0xB77Cdf9B2E1547c3b9b47744b490Fa4C1Dee7b63');
 
-  console.log(`Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`);
+  await ballot.deployed();
+  console.log(`Ballot contract deployed successfully at ${ballot.address}`);
+
+  abiFile = JSON.parse(fs.readFileSync("./artifacts/contracts/Ballot.sol/Ballot.json", "utf8"))
+  abi = JSON.stringify(abiFile.abi);
+  await ballot.deployTransaction.wait(7);
+
+  /** VERIFICATION: 
+   *****************/
+  await hre.run("verify:verify", {
+    address: ballot.address,
+    constructorArguments: [token.address],
+  });
 }
 
 // We recommend this pattern to be able to use async/await everywhere
