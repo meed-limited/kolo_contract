@@ -66,27 +66,6 @@ contract Ballot {
         _pollId = _pollId + 1; // increment poll id
     }
 
-    /*
-    // change the status of the _acceptingProjects
-    function setProjectStatus() external onlyOwner() {
-        if (_acceptingProjects == false) {
-            _acceptingProjects = true;
-        } else {
-            _acceptingProjects = false;
-        }
-    }
-
-    // change the status of the acceptingroposal
-    function setPollStatus() external onlyOwner {
-        if (_pollOpened == false) {
-            _pollOpened = true;
-        } else {
-            _pollOpened = false;
-            _pollId = _pollId + 1;
-        }
-    }
-*/
-
     function isAcceptingProjects() external view returns (bool) {
         return _acceptingProjects;
     }
@@ -194,10 +173,12 @@ contract Ballot {
         returns (uint256[] memory, uint256[] memory)
     {
         uint256[] memory projectIds = _tracker[pollId];
-
         uint256[] memory results;
-        for (uint256 i = 0; i < projectIds.length; i++) {
-            results[i] = (_pollHistory[pollId][projectIds[i]]).voteCount;
+
+        if (projectIds.length > 0) {
+            for (uint256 i = 0; i < projectIds.length; i++) {
+                results[i] = (_pollHistory[pollId][projectIds[i]]).voteCount;
+            }
         }
 
         return (projectIds, results);
