@@ -8,6 +8,7 @@ import "@nomiclabs/hardhat-etherscan";
 const privateKey: string = process.env.PRIVATE_KEY!;
 const alchemyApiKey: string = process.env.ALCHEMY_API_KEY!;
 const etherscanApiKey: string = process.env.ETHERSCAN_API_KEY!;
+const polygonApiKey: string = process.env.POLYGON_API_KEY!;
 const bscApiKey: string = process.env.BSCSCAN_API_KEY!;
 
 const config: HardhatUserConfig = {
@@ -20,9 +21,14 @@ const config: HardhatUserConfig = {
       chainId: 5
     },
     bsc_testnet: {
-      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      url: "https://data-seed-prebsc-1-s3.binance.org:8545",
       accounts: [`${privateKey}`],
       chainId: 97
+    },
+    polygon: {
+      url: `https://polygon-mumbai.g.alchemy.com/v2/NZt5O1ADxcAmpn1iNdSuH1nPJdfqcalY`,
+      accounts: [`${privateKey}`],
+      chainId: 80001
     }
   },
   etherscan: {
