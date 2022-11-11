@@ -20,6 +20,7 @@ contract Ballot {
 
     mapping(uint256 => mapping(uint256 => Project)) private _pollHistory;
     mapping(uint256 => uint256[]) private _tracker;
+    mapping(uint256 => uint256) private _voteCount;
 
     modifier onlyOwner() {
         require(msg.sender == chairPerson, "Not owner");
@@ -30,15 +31,13 @@ contract Ballot {
     event VoteSubmitted(address voter, uint256 projectId);
     event PollWinnerAnnounced(
         uint256 polllId,
-        uint256 projectId,
-        address winner
+        uint256 projectId
     );
 
     struct Project {
         uint256 id;
         bytes32 title;
         address owner;
-        uint256 voteCount;
     }
 
     constructor(address erc20Token) {
@@ -60,8 +59,8 @@ contract Ballot {
     function closePoll() external onlyOwner {
         _acceptingProjects = true; // start accepting new proposals immediately
         _pollOpened = false; // stop voting
-        (uint256 projectId, address winner) = getPollWinner(_pollId); // declare winner of last poll
-        emit PollWinnerAnnounced(_pollId, projectId, winner);
+        uint256 projectId = getPollWinner(_pollId); // declare winner of last poll
+        emit PollWinnerAnnounced(_pollId, projectId);
         // make payment to winner ofchain and record onchain
         _pollId = _pollId + 1; // increment poll id
     }
@@ -88,13 +87,13 @@ contract Ballot {
         Project memory submission = Project({
             id: _projectId,
             title: title,
-            owner: msg.sender,
-            voteCount: 0
+            owner: msg.sender
         });
 
         _pollHistory[_pollId][_projectId] = submission;
 
         _tracker[_pollId].push(_projectId);
+        _voteCount[_projectId] = 0;
         emit NewProjectSubmitted(_projectId, title, msg.sender);
         _projectId = _projectId + 1;
     }
@@ -141,7 +140,7 @@ contract Ballot {
         daoToken.safeTransferFrom(sender, address(this), amountOfVotes);
 
         Project memory candidate = _pollHistory[_pollId][_projectId];
-        candidate.voteCount = candidate.voteCount + amountOfVotes;
+        _voteCount[projectId] = _voteCount[projectId] + amountOfVotes;
         _pollHistory[_pollId][projectId] = candidate;
 
         emit VoteSubmitted(msg.sender, projectId);
@@ -150,38 +149,27 @@ contract Ballot {
     function getPollWinner(uint256 pollId)
         internal
         view
-        returns (uint256, address)
+        returns (uint256)
     {
         uint256[] memory projectIds = _tracker[pollId];
 
         uint256 winnerProjectId = 0;
-        address winnerAddress;
-        uint256 totalVotes = 0;
+        uint256 prevVotes = 0;
         for (uint256 i = 0; i < projectIds.length; i++) {
-            if ((_pollHistory[pollId][projectIds[i]]).voteCount > totalVotes) {
-                totalVotes = (_pollHistory[pollId][projectIds[i]]).voteCount;
-                winnerAddress = (_pollHistory[pollId][projectIds[i]]).owner;
+            if (_voteCount[projectIds[i]] > prevVotes) {
                 winnerProjectId = projectIds[i];
+                prevVotes = _voteCount[winnerProjectId];
             }
         }
-        return (winnerProjectId, winnerAddress);
+        return winnerProjectId;
     }
 
-    function getPollResult(uint256 pollId)
+    function getVoteCount(uint256 projectId)
         external
         view
-        returns (uint256[] memory, uint256[] memory)
+        returns (uint256)
     {
-        uint256[] memory projectIds = _tracker[pollId];
-        uint256[] memory results;
-
-        if (projectIds.length > 0) {
-            for (uint256 i = 0; i < projectIds.length; i++) {
-                results[i] = (_pollHistory[pollId][projectIds[i]]).voteCount;
-            }
-        }
-
-        return (projectIds, results);
+        return _voteCount[projectId];
     }
 
     function retrieveVotedTokens() external onlyOwner {
