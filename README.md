@@ -8,7 +8,7 @@
 
 <br></br>
 
-# KOLO
+# KOLO - Smart Contracts
 
 KOLO is a DAO Micro-funding gamefi platform using blockchain technology to redistribute game revenue to various projects. Itis a platform that provides its users have easy access to invest and get in micro-funding
 
