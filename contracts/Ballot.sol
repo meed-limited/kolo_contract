@@ -1,112 +1,84 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.16;
 
-// Uncomment this line to use console.log
 // import "hardhat/console.sol";
 import "./interfaces/IERC20Permit.sol";
+import "./interfaces/IERC20.sol";
 import "./utils/SafeERC20.sol";
+import "./abstract/Ownable.sol";
 
-contract Ballot {
+contract Ballot is Ownable {
     using SafeERC20 for IERC20Permit;
 
+    /* Storage:
+     ************/
+
     IERC20Permit public immutable daoToken;
-    address public immutable chairPerson;
 
-    bool private _acceptingProjects = true;
-    bool private _pollOpened = false;
+    IERC20 private immutable USDC =
+        IERC20(0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d);
+    IERC20 private immutable wETH =
+        IERC20(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
 
-    uint256 private _pollId = 1;
-    uint256 private _projectId = 1;
-
-    mapping(uint256 => mapping(uint256 => Project)) private _pollHistory;
-    mapping(uint256 => uint256[]) private _tracker;
-    mapping(uint256 => uint256) private _voteCount;
-
-    modifier onlyOwner() {
-        require(msg.sender == chairPerson, "Not owner");
-        _;
-    }
-
-    event NewProjectSubmitted(uint256 projectId, bytes32 title, address owner);
-    event VoteSubmitted(address voter, uint256 projectId);
-    event PollWinnerAnnounced(
-        uint256 polllId,
-        uint256 projectId
-    );
+    bool public isPollOpened = false; // false = submit, true = vote;
+    uint256 public pollId = 1;
 
     struct Project {
         uint256 id;
+        uint256 amountNeeded;
         bytes32 title;
         address owner;
     }
 
+    mapping(uint256 => mapping(uint256 => Project)) private _specificProject; // map Project Struct per projectId per pollId
+    mapping(uint256 => Project[]) private _projectsPerPoll; // map all projects per pollId
+    mapping(uint256 => mapping(uint256 => uint256)) private _votesPerProject; // map vote count per pollId per projectId
+
+    /* Events:
+     **********/
+
+    event NewProjectSubmitted(
+        uint256 projectId,
+        bytes32 title,
+        uint256 amountNeeded,
+        address owner
+    );
+    event VoteSubmitted(address voter, uint256 projectId);
+    event PollWinnerAnnounced(uint256 polllId, Project winner);
+
     constructor(address erc20Token) {
         daoToken = IERC20Permit(erc20Token);
-        chairPerson = msg.sender;
+        _projectsPerPoll[pollId].push();
     }
 
-    // open poll for voting
-    function startPoll(address[] memory bakers, uint256[] memory amounts)
-        external
-        onlyOwner
-    {
-        _acceptingProjects = false; // stop accepting new projects
-        _pollOpened = true; // start allowing me poll
-        daoToken.batchTransfer(bakers, amounts);
-    }
+    /* Write Functions:
+     *******************/
 
-    // close poll and make payment
-    function closePoll() external onlyOwner {
-        _acceptingProjects = true; // start accepting new proposals immediately
-        _pollOpened = false; // stop voting
-        uint256 projectId = getPollWinner(_pollId); // declare winner of last poll
-        emit PollWinnerAnnounced(_pollId, projectId);
-        // make payment to winner ofchain and record onchain
-        _pollId = _pollId + 1; // increment poll id
-    }
+    /**
+     * @notice Append new project to the to history
+     * @param _title Project title stored as bytes32
+     * @param _amount Amount needed to fund the project
+     */
+    function submitProject(bytes32 _title, uint256 _amount) external {
+        require(!isPollOpened, "No new project allowed now");
 
-    function isAcceptingProjects() external view returns (bool) {
-        return _acceptingProjects;
-    }
+        uint256 _projectId = _projectsPerPoll[pollId].length;
 
-    function isPollOpened() external view returns (bool) {
-        return _pollOpened;
-    }
-
-    function currentPollId() external view returns (uint256) {
-        return _pollId;
-    }
-
-    function currentProjectId() external view returns (uint256) {
-        return _projectId;
-    }
-
-    // Append new project to the to history
-    function submitProject(bytes32 title) external {
-        require(_acceptingProjects, "No new project allowed now");
         Project memory submission = Project({
             id: _projectId,
-            title: title,
-            owner: msg.sender
+            title: _title,
+            owner: msg.sender,
+            amountNeeded: _amount
         });
 
-        _pollHistory[_pollId][_projectId] = submission;
-
-        _tracker[_pollId].push(_projectId);
-        _voteCount[_projectId] = 0;
-        emit NewProjectSubmitted(_projectId, title, msg.sender);
-        _projectId = _projectId + 1;
+        _specificProject[pollId][_projectId] = submission;
+        _projectsPerPoll[pollId].push(submission);
+        _votesPerProject[pollId][_projectId] = 0;
+        emit NewProjectSubmitted(_projectId, _title, _amount, msg.sender);
     }
 
-    function getProjects(uint256 pollId)
-        external
-        view
-        returns (uint256[] memory)
-    {
-        uint256[] memory ids = _tracker[pollId];
-
-        return (ids);
-    }
+    /* View:
+     *********/
 
     function voteWeight(address sender)
         external
@@ -117,14 +89,106 @@ contract Ballot {
         allowance = daoToken.allowance(sender, address(this));
     }
 
-    // vote a Projectn with all KOL tokens
+    /**
+     * @notice Return all projects submitted per poll Id
+     * @param _pollId Specific poll id wanted
+     */
+    function getProjects(uint256 _pollId)
+        external
+        view
+        returns (Project[] memory)
+    {
+        return _projectsPerPoll[_pollId];
+    }
+
+    /**
+     * @notice Return the vote count for a specific project
+     * @param projectId Specific project id wanted
+     */
+    function getVoteCount(uint256 projectId) external view returns (uint256) {
+        return _votesPerProject[pollId][projectId];
+    }
+
+    /**
+     * @notice Return the winner for a given pollId
+     * Note: !!! Winner may ne be definitive on current poll !!!
+     * @param _pollId Specific poll id wanted
+     */
+    function getWinner(uint256 _pollId) external view returns (Project memory) {
+        require(_pollId <= pollId && _pollId != 0, "_pollId invalid");
+
+        Project[] memory projects = _projectsPerPoll[_pollId];
+        Project memory winner = projects[1];
+
+        if (projects.length > 2) {
+            uint256 prevVotes = this.getVoteCount(projects[1].id);
+
+            for (uint256 i = 2; i < projects.length; i++) {
+                uint256 currentVotes = this.getVoteCount(projects[i].id);
+
+                if (currentVotes > prevVotes) {
+                    winner = projects[i];
+                    prevVotes = currentVotes;
+                }
+            }
+        }
+        return winner;
+    }
+
+    /* Restricted:
+     ****************/
+
+    /**
+     * @notice Open poll for voting
+     * @param bakers Array of addresses, to distribute off-chain token won to voters
+     * @param amounts memory Amount of KOL tokens won per addresses
+     * @dev bakers & amounts must have the same length
+     */
+    function startPoll(address[] memory bakers, uint256[] memory amounts)
+        external
+        onlyOwner
+    {
+        require(bakers.length == amounts.length, "Array don't match");
+
+        isPollOpened = true; // stop accepting new projects
+        bool result = daoToken.batchTransfer(bakers, amounts);
+        require(result, "Error in batchTransfer");
+    }
+
+    /**
+     * @notice Close poll and make payment
+     */
+    function closePoll() external onlyOwner {
+        isPollOpened = false; // start accepting new projects
+
+        if (_projectsPerPoll[pollId].length > 1) {
+            Project memory winner = this.getWinner(pollId); // declare winner of last poll
+            retrieveVotedTokens();
+
+            emit PollWinnerAnnounced(pollId, winner);
+            // @ToDo: Implement on-chain payment to winner
+            pollId += 1;
+            _projectsPerPoll[pollId].push(); //Push once to avoid <projectId == 0>
+        }
+    }
+
+    /**
+     * @notice Vote for a Project according to KOL tokens sent
+     * Vote is restricted: voters only send a signed approval so the vote function stays free
+     * @param sender Voter's address
+     * @param projectId Project Id the voter is voting for
+     * @param amountOfVotes Amount of KOL tokens the voter is allowing to the project
+     */
     function vote(
         address sender,
         uint256 projectId,
         uint256 amountOfVotes
     ) external onlyOwner {
-        require(_pollOpened, "Poll not open");
-        require(projectId <= _projectId, "Invalid project id");
+        require(isPollOpened, "Poll not open");
+        require(
+            projectId <= _projectsPerPoll[pollId].length && projectId != 0,
+            "Invalid project id"
+        );
 
         // check if the user has any token
         require(
@@ -136,43 +200,17 @@ contract Ballot {
             "Insufficient allowance"
         );
 
-        // daoToken.permit(sender, address(this), amountOfVotes, deadline, v, r, s);
+        // daoToken.permit(sender, address(this), amountOfVotes, deadline, v, r, s); // @ToDo: will be implemented later
         daoToken.safeTransferFrom(sender, address(this), amountOfVotes);
+        _votesPerProject[pollId][projectId] += amountOfVotes;
 
-        Project memory candidate = _pollHistory[_pollId][_projectId];
-        _voteCount[projectId] = _voteCount[projectId] + amountOfVotes;
-        _pollHistory[_pollId][projectId] = candidate;
-
-        emit VoteSubmitted(msg.sender, projectId);
+        emit VoteSubmitted(sender, projectId);
     }
 
-    function getPollWinner(uint256 pollId)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256[] memory projectIds = _tracker[pollId];
+    /* Internal:
+     *************/
 
-        uint256 winnerProjectId = 0;
-        uint256 prevVotes = 0;
-        for (uint256 i = 0; i < projectIds.length; i++) {
-            if (_voteCount[projectIds[i]] > prevVotes) {
-                winnerProjectId = projectIds[i];
-                prevVotes = _voteCount[winnerProjectId];
-            }
-        }
-        return winnerProjectId;
-    }
-
-    function getVoteCount(uint256 projectId)
-        external
-        view
-        returns (uint256)
-    {
-        return _voteCount[projectId];
-    }
-
-    function retrieveVotedTokens() external onlyOwner {
-        daoToken.safeTransfer(chairPerson, daoToken.balanceOf(address(this)));
+    function retrieveVotedTokens() private {
+        daoToken.safeTransfer(owner(), daoToken.balanceOf(address(this)));
     }
 }

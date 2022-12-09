@@ -5,53 +5,66 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomiclabs/hardhat-etherscan";
 
-const privateKey: string = process.env.PRIVATE_KEY!;
-const alchemyApiKey: string = process.env.ALCHEMY_API_KEY!;
-const etherscanApiKey: string = process.env.ETHERSCAN_API_KEY!;
-const polygonApiKey: string = process.env.POLYGON_API_KEY!;
-const bscApiKey: string = process.env.BSCSCAN_API_KEY!;
+const privateKey: string = process.env.PRIVATE_KEY_TEST!;
 
 const config: HardhatUserConfig = {
-  defaultNetwork: "bsc_testnet",
+  defaultNetwork: "hardhat",
 
   networks: {
+    main: {
+      url: `${process.env.API_NODE_ETH}`,
+      accounts: privateKey !== undefined ? [privateKey] : [],
+      chainId: 1,
+    },
     goerli: {
-      url: `https://eth-goerli.g.alchemy.com/v2/${alchemyApiKey}`,
-      accounts: [`${privateKey}`],
-      chainId: 5
+      url: `${process.env.API_NODE_GOERLI!}`,
+      accounts: privateKey !== undefined ? [privateKey] : [],
+      chainId: 5,
+    },
+    // Polygon networks
+    polygon: {
+      url: `${process.env.API_NODE_POLYGON}`,
+      accounts: privateKey !== undefined ? [privateKey] : [],
+      chainId: 137,
+    },
+    mumbai: {
+      url: `${process.env.API_NODE_POLYGON_MUMBAI}`,
+      accounts: privateKey !== undefined ? [privateKey] : [],
+      chainId: 80001,
+    },
+    // BNB Chain networks
+    bnb_chain: {
+      url: `${process.env.API_NODE_BSC}`,
+      accounts: privateKey !== undefined ? [privateKey] : [],
+      chainId: 56,
     },
     bsc_testnet: {
-      url: "https://data-seed-prebsc-1-s3.binance.org:8545",
-      accounts: [`${privateKey}`],
-      chainId: 97
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545",
+      accounts: privateKey !== undefined ? [privateKey] : [],
+      chainId: 97,
     },
-    polygon: {
-      url: `https://polygon-mumbai.g.alchemy.com/v2/NZt5O1ADxcAmpn1iNdSuH1nPJdfqcalY`,
-      accounts: [`${privateKey}`],
-      chainId: 80001
-    }
   },
   etherscan: {
-    apiKey: bscApiKey
+    apiKey: process.env.POLYGONSCAN_API_KEY!,
   },
   solidity: {
     version: "0.8.16",
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200
-      }
-    }
+        runs: 200,
+      },
+    },
   },
   paths: {
     sources: "./contracts",
     tests: "./test",
     cache: "./cache",
-    artifacts: "./artifacts"
+    artifacts: "./artifacts",
   },
   mocha: {
-    timeout: 40000
-  }
+    timeout: 40000,
+  },
 };
 
 export default config;

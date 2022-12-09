@@ -1,187 +1,202 @@
-import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
-import { expect } from 'chai';
-import { ethers } from 'hardhat';
-import { getPermitDigest, getDomainSeparator, sign } from "./helpers/signatures";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { expect } from "chai";
+import { BigNumber } from "ethers";
+import { ethers } from "hardhat";
+import { signERC2612Permit } from "eth-permit";
+import { KoloToken, Ballot } from "../typechain-types";
+import { parseBytes32String } from "ethers/lib/utils";
 
-describe('Ballot', function () {
-    // define fixture setup
-    async function deployBallotFixture() {
+const TITLE = ethers.utils.formatBytes32String("First Project");
+const TITLE2 = ethers.utils.formatBytes32String("Second Project");
+const AMOUNT = 50;
+const AMOUNT2 = 75;
+const INITIAL_PROJECT_ID: number = 1;
+const VOTE_AMOUNT: BigNumber = ethers.utils.parseUnits("10", 18);
 
-        const [owner, rango, joseph, paul] = await ethers.getSigners();
-        console.log(`owner address ${owner.address}`)
+describe("Ballot", function () {
+  // define fixture setup
+  async function deployBallotFixture() {
+    const [owner, rango, joseph, paul] = await ethers.getSigners();
 
-        const Token = await ethers.getContractFactory('Token');
-        const token = await Token.deploy();
+    const Token = await ethers.getContractFactory("KoloToken");
+    const token: KoloToken = await Token.deploy();
+    await token.deployed();
 
-        const Ballot = await ethers.getContractFactory('Ballot');
-        const ballot = await Ballot.deploy(token.address);
+    const Ballot = await ethers.getContractFactory("Ballot");
+    const ballot: Ballot = await Ballot.deploy(token.address);
+    await ballot.deployed();
 
-        const totalSupply: any = await token.totalSupply();
-        const name: string = await token.name();
+    const totalSupply: any = await token.totalSupply();
+    const name: string = await token.name();
 
-        return { owner, rango, joseph, paul, token, ballot, name, totalSupply };
-    }
+    return { owner, rango, joseph, paul, token, ballot, name, totalSupply };
+  }
 
-    describe('Deployment', function () {
-        it('should initialize token variables', async () => {
+  describe("Deployment", function () {
+    it("should initialize token variables", async () => {
+      const totalSupply: any = ethers.utils.parseUnits("100000000", 18);
+      const name: string = "Kolo Token";
+      const symbol: string = "KOL";
 
-            const totalSupply: any = ethers.utils.parseUnits('100000000', 18);
-            const name: string = 'Kolo Token';
-            const symbol: string = 'KOL';
-
-            const { owner, token } = await loadFixture(deployBallotFixture);
-            expect(await token.name()).to.equal(name);
-            expect(await token.symbol()).to.equal(symbol);
-            expect(await token.totalSupply()).to.equal(totalSupply);
-            expect(await token.owner()).to.equal(owner.address);
-        });
-
-        it('should initialize ballot variables', async () => {
-            const initialPollId: number = 1;
-            const initialProjectId: number = 1;
-            
-            const { owner, ballot, token } = await loadFixture(deployBallotFixture);
-            
-            expect(await ballot.isAcceptingProjects()).to.equal(false);
-            expect(await ballot.isPollOpened()).to.equal(false);
-            expect(await ballot.currentPollId()).to.equal(initialPollId);
-            expect(await ballot.currentProjectId()).to.equal(initialProjectId);
-            expect(await ballot.chairPerson()).to.equal(owner.address);
-            expect(await ballot.daoToken()).to.equal(token.address);
-        });
-
-        it('should fail if the acceptingProjects is false', async () => {
-            const topic = ethers.utils.formatBytes32String('First Project');
-
-            const { ballot, rango } = await loadFixture(deployBallotFixture);
-            await expect(ballot.connect(rango).submitProject(topic)).to.be.revertedWith('No new project allowed now');
-        });
+      const { owner, token } = await loadFixture(deployBallotFixture);
+      expect(await token.name()).to.equal(name);
+      expect(await token.symbol()).to.equal(symbol);
+      expect(await token.totalSupply()).to.equal(totalSupply);
+      expect(await token.owner()).to.equal(owner.address);
     });
 
-    describe('Project and Voting', () => {
-        describe('Project Submission', () => {
-            it('should fail to submit by a person who is not owner', async () => {
-                const initialPollId: number = 1;
-                const initialProjectId: number = 1;
+    it("should initialize ballot variables", async () => {
+      const initialPollId: number = 1;
 
-                const { ballot, rango } = await loadFixture(deployBallotFixture);
-                
-                const topic = ethers.utils.formatBytes32String('First Project');
-                await expect(ballot.connect(rango).submitProject(topic)).to.be.revertedWith('No new project allowed now');
-                expect(await ballot.currentPollId()).to.equal(initialProjectId);
-            });
+      const { owner, ballot, token } = await loadFixture(deployBallotFixture);
 
-            it('should submit a new Project', async () => {
-                const initialProjectId: number = 1;
-                const topic = ethers.utils.formatBytes32String('First Project');
+      expect(await ballot.isPollOpened()).to.equal(false);
+      expect(await ballot.pollId()).to.equal(initialPollId);
+      expect(await ballot.chairPerson()).to.equal(owner.address);
+      expect(await ballot.daoToken()).to.equal(token.address);
+    });
+  });
 
-                const { token, name, totalSupply, ballot, owner, rango } = await loadFixture(deployBallotFixture);
+  describe("Project and Voting", () => {
+    describe("Project Submission", () => {
+      it("should fail to submit if isPollOpened is true", async () => {
+        const { ballot, owner, rango } = await loadFixture(deployBallotFixture);
 
-                await ballot.setProjectStatus();
-                expect(await ballot.isAcceptingProjects()).to.equal(true);
+        await expect(ballot.connect(rango).startPoll([owner.address], [0])).to.be.revertedWith("Not owner");
 
-                // get the projectId from events for API request
-                // const projectId = await ballot.submitProject(topic);
-                // console.log(`projectId: ${JSON.stringify(projectId)}`);
+        await ballot.connect(owner).startPoll([owner.address], [0]);
+        expect(await ballot.isPollOpened()).to.equal(true);
+        await expect(ballot.connect(rango).submitProject(TITLE, AMOUNT)).to.be.revertedWith(
+          "No new project allowed now"
+        );
+      });
 
-                let rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
-                console.log(`rango balance: ${rangoBalance}`);
+      it("should submit a new Project successfully", async () => {
+        const { ballot, rango } = await loadFixture(deployBallotFixture);
 
-                await expect(await ballot.connect(rango).submitProject(topic))
-                    .to.emit(ballot, 'NewProjectSubmitted')
-                    .withArgs(initialProjectId, topic, rango.address);
-                
-                expect(await ballot.currentProjectId()).to.equal(2);
+        expect(await ballot.isPollOpened()).to.equal(false);
 
-                const amountOfTokensToVote: any = ethers.utils.parseUnits('10', 18);
-                const deadline: any = ethers.constants.MaxUint256;
+        let rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
+        console.log(`rango balance: ${rangoBalance}`);
 
-                //
+        await expect(await ballot.connect(rango).submitProject(TITLE, AMOUNT))
+          .to.emit(ballot, "NewProjectSubmitted")
+          .withArgs(INITIAL_PROJECT_ID, TITLE, AMOUNT, rango.address);
 
-                expect(await token.balanceOf(rango.address)).to.equal(0);
-                expect(await token.balanceOf(owner.address)).to.equal(totalSupply);
+        expect(ethers.utils.parseBytes32String(TITLE)).to.equal("First Project");
 
-                const amount: any = ethers.utils.parseUnits('100', 18);
-                await token.transfer(rango.address, amount);
-                expect(await token.balanceOf(rango.address)).to.equal(amount);
-                // expect(await token.balanceOf(owner.address)).to.equal(totalSupply - amount);
-
-                // get rango signatures
-                const { v, r, s }: any = await getPermitSignature(rango, token, ballot.address, amountOfTokensToVote, deadline );
-
-                console.log('Balance BEFORE Signature by Rango')
-                rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
-                let balanceBefore = rangoBalance;
-                let ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
-                let rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
-                let ownerKOL = ethers.utils.formatEther(await token.balanceOf(owner.address));
-                console.log(`Rango - ETH balance: ${rangoBalance}, KOL balance: ${rangoKOL}`);
-                console.log(`Owner - ETH balance: ${ownerBalance}, KOL balance: ${ownerKOL}`);
-
-                await expect(ballot.vote(rango.address, initialProjectId, amountOfTokensToVote))
-                    .to.be.revertedWith('Poll not open');
-
-                // open poll
-                await ballot.setPollStatus();
-                expect(await ballot.isPollOpened()).to.equal(true);
-
-                // owner call permit approval using rango signatures
-                await token.permit(rango.address, ballot.address, amountOfTokensToVote, deadline, v, r, s);
-
-                console.log('\nBalance AFTER Permit approval by Rango BEFORE voting by Owner');
-                rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
-                balanceBefore = rangoBalance;
-                ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
-                rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
-                ownerKOL = ethers.utils.formatEther(await token.balanceOf(owner.address));
-                console.log(`Rango - ETH balance: ${rangoBalance}, KOL balance: ${rangoKOL}`);
-                console.log(`Owner - ETH balance: ${ownerBalance}, KOL balance: ${ownerKOL}`);
-
-                console.log(`Rango allowance: ${await token.allowance(rango.address, ballot.address)}`);
-
-                await ballot.vote(rango.address, initialProjectId, amountOfTokensToVote);
-
-                expect(await token.balanceOf(ballot.address)).to.equal(amountOfTokensToVote);
-
-                console.log('\nBalance AFTER Owner submit vote for Rango')
-                rangoBalance = ethers.utils.formatEther(await ethers.provider.getBalance(rango.address));
-                ownerBalance = ethers.utils.formatEther(await ethers.provider.getBalance(owner.address));
-                rangoKOL = ethers.utils.formatEther(await token.balanceOf(rango.address));
-                ownerKOL = ethers.utils.formatEther(await token.balanceOf(owner.address));
-                console.log(`Rango - ETH balance: ${rangoBalance}, KOL balance: ${rangoKOL}`);
-                console.log(`Owner - ETH balance: ${ownerBalance}, KOL balance: ${ownerKOL}`);
-
-                expect(ethers.utils.formatEther(await ethers.provider.getBalance(rango.address))).to.equal(balanceBefore);
-
-            });
-        });
+        const projects = await ballot.getProjects(1);
+        expect(projects.length).to.equal(2);
+      });
     });
 
-    async function getPermitSignature(signer: any, token: any, spender: string, value: number, deadline: number): Promise<any> {
+    describe("Project Vote", () => {
+      it("should fail to vote", async () => {
+        const { ballot, owner, rango } = await loadFixture(deployBallotFixture);
 
-        const [nonce, name, version, chainId] = await Promise.all([
-          token.nonces(signer.address),
-          token.name(),
-          "1",
-          signer.getChainId(),
-        ])
+        expect(await ballot.isPollOpened()).to.equal(false);
 
-        const rango_PK = Buffer.from("59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d", "hex");
+        // Submit 2 projects
+        await expect(await ballot.connect(rango).submitProject(TITLE, AMOUNT))
+          .to.emit(ballot, "NewProjectSubmitted")
+          .withArgs(INITIAL_PROJECT_ID, TITLE, AMOUNT, rango.address);
+        await expect(await ballot.connect(owner).submitProject(TITLE2, AMOUNT2))
+          .to.emit(ballot, "NewProjectSubmitted")
+          .withArgs(INITIAL_PROJECT_ID + 1, TITLE2, AMOUNT2, owner.address);
 
-        // Create the approval request
-        const approve = {
-            owner: signer.address,
-            spender: spender,
-            value: value,
-        };
+        // Check that projects were submitted succesfully
+        const projects = await ballot.getProjects(1);
+        expect(projects.length).to.equal(3);
+        expect(projects[2].id).to.equal(2);
+        expect(projects[2].amountNeeded).to.equal(75);
+        expect(parseBytes32String(projects[2].title)).to.equal("Second Project");
+        expect(projects[2].owner).to.equal(owner.address);
 
-        // Get the EIP712 digest
-        const digest = getPermitDigest(name, token.address, chainId, approve, nonce, deadline);
+        await expect(ballot.connect(owner).vote(rango.address, INITIAL_PROJECT_ID, VOTE_AMOUNT)).to.be.revertedWith(
+          "Poll not open"
+        );
 
-        // Sign it
-        // NOTE: we don't want the message to be hashed again internally, so we sign manually
-        const { v, r, s } = sign(digest, rango_PK);
-      
-        return { v, r, s };
-      }
+        await ballot.startPoll([owner.address], [0]);
+        await expect(ballot.connect(rango).vote(rango.address, INITIAL_PROJECT_ID, VOTE_AMOUNT)).to.be.revertedWith(
+          "Not owner"
+        );
+      });
+
+      it("should vote successfully", async () => {
+        const { ballot, token, owner, rango, totalSupply } = await loadFixture(deployBallotFixture);
+        const amount: BigNumber = ethers.utils.parseUnits("100", 18);
+
+        await ballot.connect(rango).submitProject(TITLE, AMOUNT);
+        await ballot.connect(owner).submitProject(TITLE2, AMOUNT2);
+
+        await ballot.startPoll([owner.address], [0]);
+        expect(await ballot.isPollOpened()).to.equal(true);
+
+        expect(await token.balanceOf(rango.address)).to.equal(0);
+        expect(await token.balanceOf(owner.address)).to.equal(totalSupply);
+
+        await token.transfer(rango.address, amount);
+        expect(await token.balanceOf(rango.address)).to.equal(amount);
+        expect(await token.balanceOf(owner.address)).to.equal(totalSupply.toBigInt() - amount.toBigInt());
+
+        // get rango signatures
+        const deadline = 100000000000000;
+        const nonce = await token.nonces(rango.address);
+
+        const result = await signERC2612Permit(
+          rango,
+          token.address,
+          rango.address,
+          ballot.address,
+          amount.toString(),
+          deadline,
+          parseInt(nonce.toString())
+        );
+
+        // Approve rango from owner
+        await token.permit(
+          rango.address,
+          ballot.address,
+          amount.toString(),
+          result.deadline,
+          result.v,
+          result.r,
+          result.s
+        );
+
+        // Check allowance has been set
+        expect(await token.allowance(rango.address, ballot.address)).to.equal(amount.toString());
+
+        const voteWeight = await ballot.voteWeight(rango.address);
+        expect(voteWeight.allowance).to.equal(amount.toString());
+        expect(voteWeight.balance).to.equal(amount.toString());
+
+        await expect(await ballot.connect(owner).vote(rango.address, 2, amount.toString()))
+          .to.emit(ballot, "VoteSubmitted")
+          .withArgs(rango.address, INITIAL_PROJECT_ID + 1);
+
+        expect(await ballot.getVoteCount(INITIAL_PROJECT_ID + 1)).to.equal(amount.toString());
+      });
+
+      it("should close poll and return winner", async () => {
+        const { ballot, token, owner, rango, totalSupply } = await loadFixture(deployBallotFixture);
+        const amount: BigNumber = ethers.utils.parseUnits("100", 18);
+
+        await ballot.connect(rango).submitProject(TITLE, AMOUNT);
+        await ballot.connect(owner).submitProject(TITLE2, AMOUNT2);
+
+        await ballot.startPoll([owner.address], [0]);
+
+        await token.connect(owner).approve(ballot.address, amount.toString());
+        await expect(await ballot.connect(owner).vote(owner.address, 2, amount.toString()))
+          .to.emit(ballot, "VoteSubmitted")
+          .withArgs(owner.address, INITIAL_PROJECT_ID + 1);
+
+        await expect(ballot.connect(rango).closePoll()).to.be.revertedWith("Not owner");
+
+        const winner = await ballot.getWinner(1);
+        await expect(ballot.connect(owner).closePoll()).to.emit(ballot, "PollWinnerAnnounced").withArgs(1, winner);
+      });
+    });
+  });
 });
